@@ -1,14 +1,13 @@
-// Usamos módulos ES desde CDN
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { FontLoader } from "https://unpkg.com/three@0.160.0/examples/jsm/loaders/FontLoader.js";
-import { TextGeometry } from "https://unpkg.com/three@0.160.0/examples/jsm/geometries/TextGeometry.js";
+// main.js — Corazón 3D (Bézier exacto) + texto
+import * as THREE from "https://esm.sh/three@0.160.0";
+import { FontLoader } from "https://esm.sh/three@0.160.0/examples/jsm/loaders/FontLoader.js";
+import { TextGeometry } from "https://esm.sh/three@0.160.0/examples/jsm/geometries/TextGeometry.js";
 
 const container = document.getElementById("scene");
 
-// Escena
+// ---------- Escena / cámara / renderer ----------
 const scene = new THREE.Scene();
 
-// Cámara
 const camera = new THREE.PerspectiveCamera(
   45,
   container.clientWidth / container.clientHeight,
@@ -17,110 +16,141 @@ const camera = new THREE.PerspectiveCamera(
 );
 camera.position.set(0, 0, 85);
 
-// Render
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 renderer.setSize(container.clientWidth, container.clientHeight);
 container.appendChild(renderer.domElement);
 
-// Grupo principal para rotar todo junto
+// Grupo para rotar todo junto
 const group = new THREE.Group();
 scene.add(group);
 
-// ---------- Corazón 3D en malla (extrusión de una curva 2D) ----------
-function createHeartWireframe() {
-  // Curva paramétrica del corazón (2D)
-  const pts = [];
-  const STEPS = 500; // más pasos -> más suave
-  for (let i = 0; i <= STEPS; i++) {
-    const t = (i / STEPS) * Math.PI * 2;
-    const x = 16 * Math.pow(Math.sin(t), 3);
-    const y =
-      13 * Math.cos(t) -
-      5 * Math.cos(2 * t) -
-      2 * Math.cos(3 * t) -
-      Math.cos(4 * t);
-    pts.push(new THREE.Vector2(x, y));
-  }
+// ---------- Corazón con las curvas Bézier de la figura ----------
+function createHeartMesh({ wireframe = true, color = 0xff6aa6 } = {}) {
+  const x = 0, y = 0;
+  const s = 1; // escala base del shape (lo centraremos y escalaremos luego)
 
-  const shape = new THREE.Shape(pts);
+  const heartShape = new THREE.Shape();
+  // Punto inicial:
+  heartShape.moveTo(x + 25, y + 25);
 
-  const extrude = new THREE.ExtrudeGeometry(shape, {
-    depth: 10,             // grosor “3D”
-    steps: 2,
+  // Mismas 6 curvas Bézier que viste en GeoGebra:
+
+
+
+
+
+
+  heartShape.bezierCurveTo(x + 25, y + 25, x + 20, y + 0,  x + 0,  y + 0);
+  heartShape.bezierCurveTo(x - 30, y + 0,  x - 30, y + 35, x - 30, y + 35);
+  heartShape.bezierCurveTo(x - 30, y + 55, x - 10, y + 77, x + 25, y + 95);
+  heartShape.bezierCurveTo(x + 60, y + 77, x + 80, y + 55, x + 80, y + 35);
+  heartShape.bezierCurveTo(x + 80, y + 35, x + 80, y + 0,  x + 50, y + 0);
+  heartShape.bezierCurveTo(x + 35, y + 0,  x + 25, y + 25, x + 25, y + 25);
+
+  // Extrusión para darle grosor 3D
+  const geom = new THREE.ExtrudeGeometry(heartShape, {
+    depth: 10,           // grosor
+    steps: 1,
     bevelEnabled: true,
-    bevelSegments: 8,
-    bevelSize: 1.2,
-    bevelThickness: 1.2,
-    curveSegments: 300,    // densidad del mallado en el contorno
+    bevelSegments: 6,
+    bevelSize: 2,
+    bevelThickness: 2,
+    curveSegments: 64,
   });
 
-  // Centrar y escalar a un tamaño cómodo
-  extrude.center();
-  const s = 1.3;
-  extrude.scale(s, s, s);
+  // Centrar y escalar a tamaño cómodo
+  geom.center();
+  geom.scale(0.25 * s, 0.25 * s, 0.25 * s);
 
-  const mat = new THREE.MeshBasicMaterial({
-    color: 0xff6aa6,   // rosa suave
-    wireframe: true,   // apariencia de malla/vector
-  });
+  // --------- Opciones de “malla”: wireframe o aristas limpias ---------
+  const USE_EDGES = false; // pon true para líneas limpias (sin diagonales internas)
 
-  const mesh = new THREE.Mesh(extrude, mat);
-  // Un poquito inclinado para “volumen”
-  mesh.rotation.x = THREE.MathUtils.degToRad(12);
-  return mesh;
+  if (USE_EDGES) {
+    const edges = new THREE.EdgesGeometry(geom, 12);
+    const lineMat = new THREE.LineBasicMaterial({ color });
+    const lines = new THREE.LineSegments(edges, lineMat);
+    lines.rotation.x = THREE.MathUtils.degToRad(12);
+    return lines;
+  } else {
+    const mat = new THREE.MeshBasicMaterial({ color, wireframe });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.rotation.x = THREE.MathUtils.degToRad(12);
+    mesh.rotation.x = THREE.MathUtils.degToRad(180);
+
+    return mesh;
+  }
 }
 
-const heartMesh = createHeartWireframe();
-group.add(heartMesh);
+const heart = createHeartMesh();
+group.add(heart);
 
-// ---------- Texto "TE AMO" en medio ----------
-const fontLoader = new FontLoader();
-fontLoader.load(
+// ---------- Texto “TE AMO” y “FÁTIMA” ----------
+new FontLoader().load(
   "https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json",
   (font) => {
-    const textGeo = new TextGeometry("TE AMO", {
+    // Texto superior: TE AMO
+    const geo1 = new TextGeometry("TE AMO", {
       font,
       size: 10,
-      height: 2.2,
-      curveSegments: 8,
-      bevelEnabled: false,
+      height: 2,
+      curveSegments: 32,
+      bevelEnabled: true,
+      bevelSize: 0.3,
+      bevelThickness: 0.3,
+      bevelSegments: 5,
     });
-    textGeo.center(); // centramos el texto en su propio bounding box
+    geo1.center();
+    const mat1 = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+    const text1 = new THREE.Mesh(geo1, mat1);
+    text1.position.z = 1.5;
+    text1.rotation.y = Math.PI;
+    group.add(text1);
 
-    const textMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, // blanco
-      wireframe: true, // también en malla para mantener el estilo
+    // Texto inferior: FÁTIMA
+    const geo2 = new TextGeometry("FATIMA", {
+      font,
+      size: 6,     // un poco más pequeño
+      height: 2,
+      curveSegments: 32,
+      bevelEnabled: true,
+      bevelSize: 0.25,
+      bevelThickness: 0.25,
+      bevelSegments: 4,
     });
-
-    const textMesh = new THREE.Mesh(textGeo, textMat);
-    // Ligeramente al frente para que no se pierda dentro del corazón
-    textMesh.position.z = 1.5;
-    group.add(textMesh);
-  }
+    geo2.center();
+    const mat2 = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }); // azul claro para contraste
+    const text2 = new THREE.Mesh(geo2, mat2);
+    text2.position.z = 1.5;
+    text2.position.y = -12; // bajarlo debajo del TE AMO
+    text2.rotation.y = Math.PI;
+    group.add(text2);
+  },
+  undefined,
+  (err) => console.error("No cargó la fuente:", err)
 );
 
-// Luz opcional (no afecta MeshBasicMaterial, pero si cambias a MeshLambert lo tendrás listo)
-// const light = new THREE.AmbientLight(0xffffff, 0.6);
-// scene.add(light);
-
-// Animación
+// ---------- Animación (con latido suave) ----------
 let t = 0;
 function animate() {
   requestAnimationFrame(animate);
   t += 0.01;
-  group.rotation.y = t;         // giro suave
-  group.rotation.x = Math.sin(t * 0.35) * 0.2; // leve bamboleo
+
+  // Latido sutil
+  const s = 1 + Math.sin(t * 2) * 0.03;
+  group.scale.set(s, s, s);
+
+  // Giro
+  group.rotation.y += 0.01;
+
   renderer.render(scene, camera);
 }
 animate();
 
-// Responsivo
-window.addEventListener("resize", onResize);
-function onResize() {
-  const w = container.clientWidth;
-  const h = container.clientHeight;
+// ---------- Resize ----------
+window.addEventListener("resize", () => {
+  const w = container.clientWidth, h = container.clientHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
-}
+});
